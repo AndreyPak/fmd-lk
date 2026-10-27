@@ -342,7 +342,7 @@ function checklist(d){
   const groups = tasksFor(d); let total=0, done=0;
   const html = groups.map((g,gi) => `<div class="group-h">${esc(g.g)}</div>` + g.items.map((t,i) => {
     const id = `d${d.n}_${gi}_${i}`; total++; if (checks[id]) done++;
-    return `<div class="task"><label><input type="checkbox" id="${id}" data-ck="${id}" ${checks[id]?'checked':''}><span>${esc(t)}</span></label>${taskLink(t)}</div>`;
+    return `<div class="task"><label><input type="checkbox" id="${id}" data-ck="${id}" ${checks[id]?'checked':''}><span>${esc(t)}</span></label>${taskLink(t, d)}</div>`;
   }).join('')).join('');
   return {html, total, done};
 }
@@ -364,16 +364,21 @@ const LINKS = [
   [/лимфо-тоник/i, 'Рецепт', 'img:napitki'],
   [/детокс-вода|розмариновая вода|л воды/i, 'Рецепты воды', 'pdf:detox-voda'],
   [/что такое fmd/i, 'Открыть', 'pdf:chto-takoe-fmd'],
-  [/замочить/i, 'Рецепт', 'today#sec-menu'],
+  [/замочить/i, 'Рецепт', 'next:Завтрак'],
   [/биоимпеданс|калораж/i, 'Как считать', 'program#sec-exit'],
   [/как жить дальше/i, 'Открыть', 'today#sec-life'],
   [/3 приёма пищи/i, 'Меню', 'today#sec-menu'],
   [/ванн|баня|хаммам|тёплая вода|травяные чаи|жевание/i, 'Распорядок', 'pdf:rasporyadok-dnya'],
   [/прогулк|лечь спать/i, 'Гид', 'pdf:limfa']
 ];
-function taskLink(t){
+function taskLink(t, d){
   const m = LINKS.find(l => l[0].test(t)); if (!m) return '';
   const [,label,to] = m;
+  if (to.startsWith('next:')){ /* рецепт из меню следующего дня (замочить гречку → завтрак завтра) */
+    const nd = d && dayObj(d.n + 1), i = nd && nd.meals ? nd.meals.findIndex(x => x.m === to.slice(5)) : -1;
+    if (i < 0) return '';
+    return `<button class="tlink" data-nav="today#meal-${i}" data-navday="${nd.n}">${label} →</button>`;
+  }
   if (to.startsWith('pdf:')) return `<a class="tlink" href="files/${to.slice(4)}.pdf" target="_blank" rel="noopener">${label} ↗</a>`;
   if (to.startsWith('url:')) return `<a class="tlink" href="${esc(to.slice(4))}" target="_blank" rel="noopener">${label} ↗</a>`;
   if (to.startsWith('img:')) return `<button class="tlink" data-img="${to.slice(4)}">${label} →</button>`;
@@ -397,7 +402,7 @@ function letter(keys, extra){
     <div class="txt">${esc(body)}</div>${extra||''}</article>`;
 }
 function meals(d){
-  return d.meals.map(m => `<article class="meal">
+  return d.meals.map((m, i) => `<article class="meal" id="meal-${i}">
     ${m.img ? `<img src="img/${m.img}.jpg" alt="${esc(m.t)}" loading="lazy">` : ''}
     <div class="b"><div class="m"><span>${esc(m.m)}</span>${m.k?`<span class="kcal">${esc(m.k)}</span>`:''}</div>
     <h3>${esc(m.t)}</h3>
@@ -616,7 +621,8 @@ function go(t, n, anchor){ const prev = tab + sel; tab=t; if(n) sel=n; try{histo
   if (!el){ window.scrollTo(0,0); return; }
   const top = el.getBoundingClientRect().top + window.scrollY - $('.top').offsetHeight - 8;
   window.scrollTo({top, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
-  const box = el.querySelector('.card, .lib, .doc') || el; box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
+  const det = el.matches('.meal') && el.querySelector('details'); if (det) det.open = true;
+  const box = el.matches('.meal') ? el : (el.querySelector('.card, .lib, .doc') || el); box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
 }
 
 document.addEventListener('click', e => {
@@ -626,7 +632,7 @@ document.addEventListener('click', e => {
   if (t.id==='lb'){ t.hidden = true; return; }
   if (t.id==='resetStart'){ start=null; store.set('start',null); go('today'); return; }
   if (t.dataset.step) ymGoal('day_step', {dir: t.dataset.step});
-  if (t.dataset.nav){ const [tb, an] = t.dataset.nav.split('#'); go(tb, null, an); return; }
+  if (t.dataset.nav){ const [tb, an] = t.dataset.nav.split('#'); go(tb, t.dataset.navday ? +t.dataset.navday : null, an); return; }
   if (t.dataset.tab) go(t.dataset.tab);
   else if (t.dataset.day){ userPicked = true; go('today', +t.dataset.day); }
   else if (t.dataset.open) go('today', +t.dataset.open);
